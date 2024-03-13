@@ -12,6 +12,8 @@ gdown
 einops
 omegaconf
 safetensors
+accelerate
 gradio
 wandb
 lion-pytorch
+yt-dlp

@@ -79,6 +79,8 @@ class VanillaTemporalModule(nn.Module):
     def forward(self, input_tensor, temb, encoder_hidden_states, attention_mask=None, anchor_frame_idx=None):
         video_length = input_tensor.shape[2]
 
+        # attention_mask = torch.triu(torch.ones(video_length, video_length), diagonal=1).to(input_tensor.device)
+
         if video_length > 1:
             hidden_states = input_tensor
             hidden_states = self.temporal_transformer(hidden_states, encoder_hidden_states, attention_mask)
@@ -141,6 +143,9 @@ class TemporalTransformer3DModel(nn.Module):
     def forward(self, hidden_states, encoder_hidden_states=None, attention_mask=None):
         assert hidden_states.dim() == 5, f"Expected hidden_states to have ndim=5, but got ndim={hidden_states.dim()}."
         video_length = hidden_states.shape[2]
+        # if attention_mask is None:
+        #     # Initialize a causal mask to prevent attention to future tokens
+        #     attention_mask = torch.triu(torch.ones((video_length, video_length), device=hidden_states.device), diagonal=1) * -10000.0
         hidden_states = rearrange(hidden_states, "b c f h w -> (b f) c h w")
 
         batch, channel, height, weight = hidden_states.shape
@@ -153,7 +158,7 @@ class TemporalTransformer3DModel(nn.Module):
 
         # Transformer Blocks
         for block in self.transformer_blocks:
-            hidden_states = block(hidden_states, encoder_hidden_states=encoder_hidden_states, video_length=video_length)
+            hidden_states = block(hidden_states, encoder_hidden_states=encoder_hidden_states, video_length=video_length, attention_mask=attention_mask)
         
         # output
         hidden_states = self.proj_out(hidden_states)
@@ -221,6 +226,7 @@ class TemporalTransformerBlock(nn.Module):
                 norm_hidden_states,
                 encoder_hidden_states=encoder_hidden_states if attention_block.is_cross_attention else None,
                 video_length=video_length,
+                attention_mask=attention_mask,
             ) + hidden_states
             
         hidden_states = self.ff(self.ff_norm(hidden_states)) + hidden_states
@@ -312,6 +318,11 @@ class VersatileAttention(CrossAttention):
                 target_length = query.shape[1]
                 attention_mask = F.pad(attention_mask, (0, target_length), value=0.0)
                 attention_mask = attention_mask.repeat_interleave(self.heads, dim=0)
+
+
+        L, S = query.shape[-2], key.shape[-2]
+        attention_mask = torch.ones(L, S, dtype=torch.bool, device=query.device).tril(diagonal=0)
+
 
         # attention, what we cannot get enough of
         if self._use_memory_efficient_attention_xformers:
