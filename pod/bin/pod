@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# TODO: move to ../
+
+OP="setup"
+ARGS="$@"
+
+PROJECT_ROOT="$(dirname $0)/../.."
+POD_ROOT="$(dirname $0)/.."
+
+source "$PROJECT_ROOT/pod_config/.pod.env"
+if [ -z "$REMOTE_DIR" ]; then
+    echo "REMOTE_DIR is not set"
+    exit 1
+fi
+
+REMOTE_DIR="$REMOTE_DIR" bun run "$POD_ROOT/pod.ts" $ARGS

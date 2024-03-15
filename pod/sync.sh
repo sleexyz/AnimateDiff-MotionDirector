@@ -1,6 +1,11 @@
 #!/bin/bash
 
-PROJECT_NAME="AnimateDiff-MotionDirector"
+source $(dirname $0)/../pod_config/.pod.env
+
+if [[ -z $REMOTE_DIR ]]; then
+    echo "REMOTE_DIR is not set"
+    exit 1
+fi
 
 set -e
 
@@ -10,7 +15,7 @@ if [[ -z $SSH_CMD ]]; then
 fi
 
 tmp_file=$(mktemp)
-sed 's/^/+ /' <($(dirname $0)/list_backend_files.sh) > $tmp_file
+sed 's/^/+ /' <($(dirname $0)/../pod_config/list_development_files.sh) > $tmp_file
 echo "- *" >> $tmp_file
 
 cat $tmp_file
@@ -28,4 +33,4 @@ rsync -avz \
       --include="**/" \
       --include-from=$tmp_file \
       -e "$SSH_CMD" \
-      ./ ":/workspace/$PROJECT_NAME"
+      ./ ":$REMOTE_DIR"

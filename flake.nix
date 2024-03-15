@@ -24,6 +24,9 @@
             bun
             watch
           ];
+          shellHook = ''
+            export PATH=$(pwd)/pod/bin:$PATH
+          '';
         };
       }
     );

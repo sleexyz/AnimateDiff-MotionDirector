@@ -97,6 +97,8 @@ export async function refreshState(ctx: Context): Promise<void> {
   const firstPod = getFirstPod(ctx);
   if (firstPod && firstPod.runtime) {
     ctx.activePod = firstPod;
+  } else {
+    delete ctx.activePod;
   }
 }
 
@@ -142,13 +144,20 @@ async function retry<T>(options: { timeout: number, delay?: number, customErrorM
   throw lastError;
 }
 
-export function getSSHCommand(podRuntime: PodRuntime) {
+export function getSSHCommand(podRuntime: PodRuntime): {
+  ip: string;
+  port: number;
+  sshCmd: string;
+} {
   const sshPort = podRuntime.ports.find((port) => port.privatePort === 22);
   if (!sshPort) {
-    console.error('No SSH port found');
-    process.exit(1);
+    throw new Error('No SSH port found');
   }
-  return `ssh root@${sshPort?.ip} -p ${sshPort?.publicPort} -i ~/.ssh/id_ed25519`;
+  return {
+    ip: sshPort.ip,
+    port: sshPort.publicPort,
+    sshCmd: `ssh root@${sshPort?.ip} -p ${sshPort?.publicPort} -i ~/.ssh/id_ed25519`,
+  };
 }
 
 function startPodMutation(podId: string) {
@@ -190,6 +199,7 @@ export async function stopPodAndWait(ctx: Context): Promise<void> {
     timeout: 2 * 60 * 1000, delay: 5000,
   }, async () => {
     await refreshState(ctx);
+
     if (!ctx.activePod) {
       return;
     }
