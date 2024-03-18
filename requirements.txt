@@ -16,4 +16,6 @@ accelerate
 gradio
 wandb
 lion-pytorch
+
 yt-dlp
+notebook

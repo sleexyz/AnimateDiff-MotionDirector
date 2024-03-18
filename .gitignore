@@ -15,8 +15,7 @@ scripts/*
 *.ckpt
 
 models/*
-!models/StableDiffusion/
-models/StableDiffusion/*
+models/StableDiffusion
 !models/StableDiffusion/*.txt
 !models/Motion_Module/
 !models/Motion_Module/*.txt

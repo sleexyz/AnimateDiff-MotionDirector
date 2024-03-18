@@ -1,7 +1,5 @@
 #!/bin/bash
 
-source $(dirname $0)/../pod_config/.pod.env
-
 if [[ -z $REMOTE_DIR ]]; then
     echo "REMOTE_DIR is not set"
     exit 1
@@ -18,7 +16,7 @@ tmp_file=$(mktemp)
 sed 's/^/+ /' <($(dirname $0)/../pod_config/list_development_files.sh) > $tmp_file
 echo "- *" >> $tmp_file
 
-cat $tmp_file
+# cat $tmp_file
 
 
 echo "**********************************"

@@ -1,9 +1,14 @@
 #!/usr/bin/env -S bun
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { Context, Pod, ensureActivePodIsLoaded as ensurePodStarted, refreshState, getSSHCommand, stopPodAndWait, getFirstPod } from './runpod';
+import { RunPodContext, Pod, ensureActivePodIsLoaded as ensurePodStarted, refreshState, getRemoteFromPodRuntime, stopPodAndWait, getFirstPod, Remote, getSshCmd } from './runpod';
+import * as dotenv from 'dotenv';
 
+const env = {
+  ...dotenv.parse(readFileSync('.env')),
+  ...dotenv.parse(readFileSync('pod_config/.pod.env')), 
+};
 
-async function loadActivePod(): Promise<Pod | null> {
+export async function loadActivePod(): Promise<Pod | null> {
   if (existsSync('.active_pod')) {
     const pod = JSON.parse(readFileSync('.active_pod').toString());
     console.log("Loaded active pod from .active_pod:", {id: pod.id, name: pod.name, on: pod.runtime !== null});
@@ -19,14 +24,22 @@ interface Operation {
   description: string;
   usage: string;
   requirePodStarted?: boolean;
-  run: (ctx: Context, args: string[]) => Promise<void>;
+  run: (ctx: RunPodContext, args: string[]) => Promise<void>;
 }
 
-const REMOTE_DIR = process.env.REMOTE_DIR || "";
-if (!REMOTE_DIR) {
-  console.error("REMOTE_DIR is not set. Exiting.");
+if (!env.REMOTE_ROOT) {
+  console.error("REMOTE_ROOT is not set. Exiting.");
   process.exit(1);
 }
+if (env.REMOTE_DIR) {
+  console.error("REMOTE_DIR is deprecated. Use REMOTE_ROOT and WORKSPACE_NAME instead. Exiting.");
+  process.exit(1);
+}
+if (!env.WORKSPACE_NAME) {
+  console.error("WORKSPACE_NAME is not set. Exiting.");
+  process.exit(1);
+}
+env.REMOTE_DIR = `${env.REMOTE_ROOT}/${env.WORKSPACE_NAME}`;
 
 const operations: OperationDict = {
   start: {
@@ -34,14 +47,14 @@ const operations: OperationDict = {
     description: "Start the pod and provision it",
     usage: "pod start",
     requirePodStarted: true,
-    run: async (ctx: Context, args: string[]) => {
-      const CLOUDFLARE_DEMO_KEY = process.env.CLOUDFLARE_DEMO_KEY || "";
-      if (!CLOUDFLARE_DEMO_KEY) {
+    run: async (ctx: RunPodContext, args: string[]) => {
+      if (!env.CLOUDFLARE_DEMO_KEY) {
         console.error("CLOUDFLARE_DEMO_KEY is not set. Exiting.");
         process.exit(1);
       }
       console.log("Provisioning the pod...");
-      await spawn(`${ctx.sshCmd} -t "CLOUDFLARE_DEMO_KEY=${CLOUDFLARE_DEMO_KEY} REMOTE_DIR=${REMOTE_DIR} bash -s" < pod_config/provision.sh`);
+      await spawn(`${ctx.sshCmd} -t "CLOUDFLARE_DEMO_KEY=${env.CLOUDFLARE_DEMO_KEY} REMOTE_DIR=${env.REMOTE_DIR} REMOTE_ROOT=${env.REMOTE_ROOT} bash -s" < pod_config/provision.sh`);
+      await spawn(`${ctx.sshCmd} -t "CLOUDFLARE_DEMO_KEY=${env.CLOUDFLARE_DEMO_KEY} REMOTE_DIR=${env.REMOTE_DIR} REMOTE_ROOT=${env.REMOTE_ROOT} bash -s" < pod/start_services.sh`);
     },
   },
   stop: {
@@ -49,7 +62,7 @@ const operations: OperationDict = {
     description: "Stop the pod",
     usage: "pod stop",
     requirePodStarted: false,
-    run: async (ctx: Context, args: string[]) => {
+    run: async (ctx: RunPodContext, args: string[]) => {
       await stopPodAndWait(ctx);
       await spawn("rm .active_pod");
     },
@@ -59,7 +72,7 @@ const operations: OperationDict = {
     description: "SSH into the pod",
     usage: "pod ssh [args]",
     requirePodStarted: true,
-    run: async (ctx: Context, args: string[]) => {
+    run: async (ctx: RunPodContext, args: string[]) => {
       await spawn(`${ctx.sshCmd} ${args.join(" ")}`);
     },
   },
@@ -68,8 +81,17 @@ const operations: OperationDict = {
     description: "Watches files for changes and syncs them to the pod.",
     usage: "pod dev [args]",
     requirePodStarted: true,
-    run: async (ctx: Context, args: string[]) => {
-      await spawn(`SSH_CMD="${ctx.sshCmd}" pod/dev.sh ${args.join(" ")}`);
+    run: async (ctx: RunPodContext, args: string[]) => {
+      await spawn(`SSH_CMD="${ctx.sshCmd}" REMOTE_DIR="${env.REMOTE_DIR}" pod/dev.sh ${args.join(" ")}`);
+    },
+  },
+  sync: {
+    name: "sync",
+    description: "Syncs files to the pod.",
+    usage: "pod sync [args]",
+    requirePodStarted: true,
+    run: async (ctx: RunPodContext, args: string[]) => {
+      await spawn(`SSH_CMD="${ctx.sshCmd}" REMOTE_DIR="${env.REMOTE_DIR}" pod/sync.sh ${args.join(" ")}`);
     },
   },
   ranger: {
@@ -77,8 +99,17 @@ const operations: OperationDict = {
     description: "Open ranger in the pod",
     usage: "pod ranger",
     requirePodStarted: true,
-    run: async (ctx: Context, args: string[]) => {
-      await spawn(`${ctx.sshCmd} -t "ranger ${REMOTE_DIR}"`);
+    run: async (ctx: RunPodContext, args: string[]) => {
+      await spawn(`${ctx.sshCmd} -t "ranger ${env.REMOTE_DIR}"`);
+    },
+  },
+  supervisorctl: {
+    name: "supervisorctl",
+    description: "Open supervisor in the pod",
+    usage: "pod supervisorctl [args]",
+    requirePodStarted: true,
+    run: async (ctx: RunPodContext, args: string[]) => {
+      await spawn(`${ctx.sshCmd} -t "supervisorctl -c ${env.REMOTE_ROOT}/supervisord.conf ${args.join(" ")}"`);
     },
   },
   pull: {
@@ -86,54 +117,104 @@ const operations: OperationDict = {
     description: "Pull files from the pod",
     usage: "pod pull <remote_source> <local_dest>",
     requirePodStarted: true,
-    run: async (ctx: Context, args: string[]) => {
+    run: async (ctx: RunPodContext, args: string[]) => {
       const source = args[0];
       const dest = args[1];
       if (!source || !dest) {
         console.error("Usage: pod pull <remote_source> <local_dest>");
-        console.error(`remote source is relative to REMOTE_DIR: ${REMOTE_DIR}`);
+        console.error(`remote source is relative to REMOTE_DIR: ${env.REMOTE_DIR}`);
         process.exit(1);
       }
       console.log("Copying files from the pod...");
-      await spawn(`scp -r -P ${ctx.port} "root@${ctx.ip}:${REMOTE_DIR}/${source}" ${dest}`);
+      await spawn(`scp -i ~/.ssh/id_ed25519 -r -P ${ctx.port} "${ctx.user}@${ctx.ip}:${env.REMOTE_DIR}/${source}" ${dest}`);
       return;
     },
   },
-}
+  push: {
+    name: "push",
+    description: "Push files to the pod",
+    usage: "pod push <local_source> <remote_dest>",
+    requirePodStarted: true,
+    run: async (ctx: RunPodContext, args: string[]) => {
+      const source = args[0];
+      const dest = args[1];
+      if (!source || !dest) {
+        console.error("Usage: pod push <local_source> <remote_dest>");
+        console.error(`remote dest is relative to REMOTE_DIR: ${env.REMOTE_DIR}`);
+        process.exit(1);
+      }
+      console.log("Copying files to the pod...");
+      await spawn(`scp -i ~/.ssh/id_ed25519 -r -P ${ctx.port} ${source} "${ctx.user}@${ctx.ip}:${env.REMOTE_DIR}/${dest}"`);
+      return;
+    },
+  },
+};
 
-class Context {
+class RunPodContext {
   pods: null | Pod[];
   activePod: null | Pod;
+
+  remoteOverride: Remote | null;
+
+  constructor(env: Record<string, string>) {
+    this.pods = null;
+    this.activePod = null;
+    if (env.POD_USER) {
+      this.remoteOverride = {
+        source: 'override',
+        ip: env.POD_IP!,
+        port: parseInt(env.POD_PORT!),
+        user: env.POD_USER!,
+      };
+    }
+  }
+
+  get remote(): Remote | null {
+    if (this.remoteOverride) {
+      return this.remoteOverride;
+    }
+    if (this.activePod) {
+      return getRemoteFromPodRuntime(this.activePod.runtime!);
+    }
+    return null
+  }
+
   get sshCmd() {
-    const {sshCmd} = getSSHCommand(this.activePod!.runtime!);
-    return sshCmd;
+    const remote = this.remote;
+    if (!remote) {
+      return null;
+    }
+    return `ssh ${remote.user}@${remote.ip} -p ${remote.port} -i ~/.ssh/id_ed25519`;
   }
   get ip() {
-    const {ip} = getSSHCommand(this.activePod!.runtime!);
-    return ip;
+    return this.remote?.ip;
   }
   get port() {
-    const {port} = getSSHCommand(this.activePod!.runtime!);
-    return port;
+    return this.remote?.port;
+  }
+  get user() {
+    return this.remote?.user;
   }
 }
 
 async function main() {
-  const ctx: Context = new Context()
+  const ctx: RunPodContext = new RunPodContext(env);
 
-  ctx.activePod = await loadActivePod();
-  if (!ctx.activePod) {
-    console.error("No active pod found. Refreshing pod data from RunPod.");
-    await refreshState(ctx);
-    if (!getFirstPod(ctx)) {
-      console.error("No pods found.");
-      process.exit(1);
+  if (!ctx.remote) {
+    ctx.activePod = await loadActivePod();
+    if (!ctx.activePod) {
+      console.error("No active pod found. Refreshing pod data from RunPod.");
+      await refreshState(ctx);
+      if (!getFirstPod(ctx)) {
+        console.error("No pods found.");
+        process.exit(1);
+      }
     }
   }
 
   const op = process.argv[2];
   if (op in operations) {
-    if (operations[op].requirePodStarted) {
+    if (operations[op].requirePodStarted && ctx.remote?.source === 'runpod') {
       await ensurePodStarted(ctx);
       writeFileSync('.active_pod', JSON.stringify(ctx.activePod, null, 2));
       if (!ctx.activePod || !ctx.activePod.runtime) {

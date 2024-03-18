@@ -30,23 +30,41 @@ function download() {
 
 
 ### Load development dependencies
-apt-get update
-apt-get -y install ranger entr vim tmux rsync supervisor git-lfs
+sudo apt-get update
+sudo apt-get -y install ranger entr vim tmux rsync supervisor git-lfs
 
 
 
 # Install AnimateDiff-MotionDirector
-if [[ ! -e /workspace/AnimateDiff-MotionDirector ]]; then
+if [[ ! -e $REMOTE_DIR ]]; then
     printf "Cloning AnimateDiff-MotionDirector...\n"
     git clone http://github.com/sleexyz/AnimateDiff-MotionDirector.git $REMOTE_DIR
     rm -rf $REMOTE_DIR/models/StableDiffusion
 fi
-# if [[ ! -e /workspace/AnimateDiff-MotionDirector/models/StableDiffusion ]]; then
-#     printf "Cloning StableDiffusion...\n"
-#     (cd $REMOTE_DIR; git lfs install; git clone https://huggingface.co/runwayml/stable-diffusion-v1-5 models/StableDiffusion/ --depth 1; git lfs fetch; git lfs checkout)
-# fi
+
+if [[ ! -e $REMOTE_DIR/models/StableDiffusion ]]; then
+    printf "Cloning StableDiffusion...\n"
+    (cd $REMOTE_DIR; git lfs install; git clone https://huggingface.co/runwayml/stable-diffusion-v1-5 models/StableDiffusion/ --depth 1; git lfs fetch; git lfs checkout)
+fi
+
+
+CONDA_BIN=$HOME/miniconda3/bin
+export PATH=$CONDA_BIN:$PATH
+
+if conda info --envs | grep -q "$REMOTE_DIR"; then 
+    echo "base already exists"
+else notebook 
+    conda create -y -p $REMOTE_DIR/venv python=3.10
+fi
+
+source activate $REMOTE_DIR/venv
 (cd $REMOTE_DIR; pip install -r requirements.txt)
 
+# install cloudflared
+if [[ ! -e /usr/local/bin/cloudflared ]]; then
+    mkdir -p /tmp/cloudflared
+    (cd /tmp/cloudflared; wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb; sudo dpkg -i cloudflared-linux-amd64.deb)
+fi
 
 MODEL_FILE=$REMOTE_DIR/v3_sd15_mm.ckpt
 MODEL_URL=https://huggingface.co/guoyww/animatediff/resolve/main/v3_sd15_mm.ckpt
@@ -62,6 +80,36 @@ if [[ ! -e  $MODEL_FILE ]]; then
     download $MODEL_URL $MODEL_FILE
 fi
 
+# Error if $CLOUDFLARE_DEMO_KEY is not set
+if [[ -z $CLOUDFLARE_DEMO_KEY ]]; then
+    echo "CLOUDFLARE_DEMO_KEY is not set"
+    exit 1
+fi
+
+cat << EOF > $REMOTE_ROOT/supervisord-$WORKSPACE_NAME.fragment.conf
+[program:jupyter]
+user=ubuntu
+chown=ubuntu:ubuntu
+command=/bin/bash -c "(source activate $REMOTE_DIR/venv; cd $REMOTE_DIR; kill $(lsof -t -i:8875); JUPYTER_CONFIG_DIR="$REMOTE_DIR/jupyter" jupyter notebook --ip 0.0.0.0 --no-browser --port 8875)"
+stopasgroup = true
+killasgroup = true
+autostart=true
+autorestart=true
+stderr_logfile=$REMOTE_ROOT/logs/jupyter.err.log
+stdout_logfile=$REMOTE_ROOT/logs/jupyter.out.log
+
+[program:cloudflared_jupyter]
+user=ubuntu
+chown=ubuntu:ubuntu
+command=/usr/local/bin/cloudflared tunnel run --url http://localhost:8875 --token $CLOUDFLARE_DEMO_KEY
+autostart=true
+autorestart=true
+stderr_logfile=$REMOTE_ROOT/logs/cloudflared_jupyter.err.log
+stdout_logfile=$REMOTE_ROOT/logs/cloudflared_jupyter.out.log
+
+EOF
 
 echo "*********************"
-echo "Provisioning complete"
+echo "Project provisioning complete"
+echo "*********************"
+
