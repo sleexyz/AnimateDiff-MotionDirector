@@ -17,7 +17,7 @@
       {
         devShell = mkShell {
           nativeBuildInputs = [
-            python3Full
+            python310Full
             jupyter
             entr
             graphviz

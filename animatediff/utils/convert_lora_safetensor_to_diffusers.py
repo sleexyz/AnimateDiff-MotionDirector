@@ -24,7 +24,7 @@ from safetensors.torch import load_file
 from diffusers import StableDiffusionPipeline
 
 
-def load_diffusers_lora(pipeline, state_dict, alpha=1.0):
+def load_diffusers_lora(pipeline, state_dict, alpha=1.0, log=False):
     # directly update weight in diffusers model
     for key in state_dict:
         # only process lora down key
@@ -35,9 +35,14 @@ def load_diffusers_lora(pipeline, state_dict, alpha=1.0):
         model_key = model_key.replace("to_out.", "to_out.0.")
         layer_infos = model_key.split(".")[:-1]
 
+        if log:
+            print(f"key: {key},  layer_infos: {layer_infos}")
+
         curr_layer = pipeline.unet
         while len(layer_infos) > 0:
             temp_name = layer_infos.pop(0)
+            if log:
+                print(temp_name)
             curr_layer = curr_layer.__getattr__(temp_name)
 
         weight_down = state_dict[key]

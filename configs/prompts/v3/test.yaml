@@ -1,0 +1,23 @@
+# 1-animation
+- domain_lora_scale: 1.0
+  adapter_lora_path: "models/Motion_Module/v3_sd15_adapter.ckpt"
+  dreambooth_path:   ""
+
+  inference_config: "configs/inference/inference-v3.yaml"
+  motion_module: "models/Motion_Module/v3_sd15_mm.ckpt"
+  motion_module_lora_configs:
+    # - path:  "outputs/2024-03-18/biking_my_video-23-59-38/lora/temporal/500_biking_temporal_unet.safetensors"
+    - path:  "models/MotionLoRA/260_cseti_8890531_drone-forward-mv2_r64_w576_h384_fr16.safetensors"
+      alpha: 1.0
+
+  H: 512
+  W: 512
+  seed: [123]
+  steps: 16
+  guidance_scale: 8.5
+
+  prompt:
+    - pov, skateboarding down tokyo street, neon lights, cyberpunk, futuristic, 4k, high quality
+  n_prompt:
+    - "worst quality, low quality, letterboxed"
+

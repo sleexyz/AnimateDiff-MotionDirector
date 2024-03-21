@@ -7,6 +7,7 @@ import torch
 import torchvision
 import torch.distributed as dist
 
+import safetensors
 from safetensors import safe_open
 from tqdm import tqdm
 from einops import rearrange
@@ -164,9 +165,11 @@ def load_weights(
         path, alpha = motion_module_lora_config["path"], motion_module_lora_config["alpha"]
         print(f"load motion LoRA from {path}")
         motion_lora_state_dict = torch.load(path, map_location="cpu")
+        # motion_lora_state_dict = safetensors.torch.load_file(path, device="cpu")
+        # print(motion_lora_state_dict.keys())
         motion_lora_state_dict = motion_lora_state_dict["state_dict"] if "state_dict" in motion_lora_state_dict else motion_lora_state_dict
         motion_lora_state_dict.pop("animatediff_config", "")
 
-        animation_pipeline = load_diffusers_lora(animation_pipeline, motion_lora_state_dict, alpha)
+        animation_pipeline = load_diffusers_lora(animation_pipeline, motion_lora_state_dict, alpha, log=True)
 
     return animation_pipeline

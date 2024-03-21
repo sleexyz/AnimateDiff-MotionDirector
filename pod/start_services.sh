@@ -27,10 +27,11 @@ fi
 
 mkdir -p $REMOTE_ROOT/logs
 
+USER=$(whoami)
+
 cat <<EOF > $REMOTE_ROOT/supervisord.conf
 [supervisord]
-user=ubuntu
-nodaemon=true
+user=$USER
 logfile=$REMOTE_ROOT/logs/supervisord.log
 
 [unix_http_server]
@@ -58,7 +59,7 @@ if [ $FOUND -eq 0 ]; then
   supervisord -c $REMOTE_ROOT/supervisord.conf
 fi
 supervisorctl -c $REMOTE_ROOT/supervisord.conf update
-supervisorctl -c $REMOTE_ROOT/supervisord.conf restart all
+supervisorctl -c $REMOTE_ROOT/supervisord.conf start all
 
 echo "*********************"
 echo "Services started"

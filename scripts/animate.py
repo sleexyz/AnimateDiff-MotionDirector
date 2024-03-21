@@ -181,7 +181,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pretrained-model-path", type=str, default="models/StableDiffusion/stable-diffusion-v1-5",)
+    parser.add_argument("--pretrained-model-path", type=str, default="models/StableDiffusion",)
     parser.add_argument("--inference-config",      type=str, default="configs/inference/inference-v1.yaml")    
     parser.add_argument("--config",                type=str, required=True)
     
@@ -192,4 +192,5 @@ if __name__ == "__main__":
     parser.add_argument("--without-xformers", action="store_true")
 
     args = parser.parse_args()
+    print(args)
     main(args)

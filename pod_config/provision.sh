@@ -50,12 +50,14 @@ fi
 
 CONDA_BIN=$HOME/miniconda3/bin
 export PATH=$CONDA_BIN:$PATH
+CONDA=$CONDA_BIN/conda
 
-if conda info --envs | grep -q "$REMOTE_DIR"; then 
+if $CONDA env list | grep -q "$REMOTE_DIR"; then
     echo "base already exists"
-else notebook 
-    conda create -y -p $REMOTE_DIR/venv python=3.10
+else 
+    $CONDA create -y -p $REMOTE_DIR/venv python=3.10 -c conda-forge
 fi
+source $CONDA_BIN/activate $REMOTE_DIR/venv
 
 source activate $REMOTE_DIR/venv
 (cd $REMOTE_DIR; pip install -r requirements.txt)
@@ -66,17 +68,24 @@ if [[ ! -e /usr/local/bin/cloudflared ]]; then
     (cd /tmp/cloudflared; wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb; sudo dpkg -i cloudflared-linux-amd64.deb)
 fi
 
-MODEL_FILE=$REMOTE_DIR/v3_sd15_mm.ckpt
+MODEL_FILE=$REMOTE_DIR/models/Motion_Module/v3_sd15_mm.ckpt
 MODEL_URL=https://huggingface.co/guoyww/animatediff/resolve/main/v3_sd15_mm.ckpt
 if [[ ! -e  $MODEL_FILE ]]; then
     printf "v3_sd15_mm.ckpt not found. Downloading..."
     download $MODEL_URL $MODEL_FILE
 fi
 
-MODEL_FILE=$REMOTE_DIR/v3_sd15_adapter.ckpt
+MODEL_FILE=$REMOTE_DIR/models/Motion_Module/v3_sd15_adapter.ckpt
 MODEL_URL=https://huggingface.co/guoyww/animatediff/resolve/main/v3_sd15_adapter.ckpt
 if [[ ! -e  $MODEL_FILE ]]; then
     printf "v3_sd15_adapter.ckpt not found. Downloading..."
+    download $MODEL_URL $MODEL_FILE
+fi
+
+MODEL_FILE=$REMOTE_DIR/models/MotionLoRA/260_cseti_8890531_drone-forward-mv2_r64_w576_h384_fr16.safetensors
+MODEL_URL=https://huggingface.co/Cseti/AD_Motion_LORAs/resolve/main/260_cseti_8890531_drone-forward-mv2_r64_w576_h384_fr16.safetensors
+if [[ ! -e  $MODEL_FILE ]]; then
+    printf "260_cseti_8890531_drone-forward-mv2_r64_w576_h384_fr16.safetensors not found. Downloading..."
     download $MODEL_URL $MODEL_FILE
 fi
 
@@ -86,11 +95,13 @@ if [[ -z $CLOUDFLARE_DEMO_KEY ]]; then
     exit 1
 fi
 
+mkdir -p $REMOTE_DIR/videos
+
 cat << EOF > $REMOTE_ROOT/supervisord-$WORKSPACE_NAME.fragment.conf
 [program:jupyter]
 user=ubuntu
 chown=ubuntu:ubuntu
-command=/bin/bash -c "(source activate $REMOTE_DIR/venv; cd $REMOTE_DIR; kill $(lsof -t -i:8875); JUPYTER_CONFIG_DIR="$REMOTE_DIR/jupyter" jupyter notebook --ip 0.0.0.0 --no-browser --port 8875)"
+command=/bin/bash -c "(source $CONDA_BIN/activate $REMOTE_DIR/venv; cd $REMOTE_DIR; kill \$(lsof -t -i:8875); JUPYTER_CONFIG_DIR=$REMOTE_DIR/jupyter jupyter notebook --ip 0.0.0.0 --no-browser --port 8875 --allow-root)"
 stopasgroup = true
 killasgroup = true
 autostart=true

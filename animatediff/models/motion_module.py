@@ -322,6 +322,7 @@ class VersatileAttention(CrossAttention):
 
         L, S = query.shape[-2], key.shape[-2]
         attention_mask = torch.ones(L, S, dtype=torch.bool, device=query.device).tril(diagonal=0)
+        print(attention_mask)
 
 
         # attention, what we cannot get enough of

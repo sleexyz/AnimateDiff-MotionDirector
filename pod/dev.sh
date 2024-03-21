@@ -16,4 +16,4 @@ function cleanup {
 
 trap cleanup EXIT
 
-"$(dirname $0)/../pod_config/list_development_files.sh" | entr -crs "$(dirname $0)/sync.sh && $SSH_CMD 'REMOTE_DIR="$REMOTE_DIR" bash -s' < \"$(dirname $0)/../pod_config/on_sync.sh\""
+"$(dirname $0)/../pod_config/list_development_files.sh" | entr -crs "$(dirname $0)/sync.sh && $SSH_CMD 'REMOTE_DIR="$REMOTE_DIR" REMOTE_ROOT="$REMOTE_ROOT" bash -s' < \"$(dirname $0)/../pod_config/on_sync.sh\""

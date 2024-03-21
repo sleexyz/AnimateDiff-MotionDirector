@@ -25,3 +25,5 @@ models/StableDiffusion
 !models/MotionLoRA/*.txt
 
 .active_pod
+.ssh_cmd
+videos/
