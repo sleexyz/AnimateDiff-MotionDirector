@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import numpy as np
 import torch.nn.functional as F
-from torch import nn
+from torch import Tensor, nn
 import torchvision
 
 from diffusers.configuration_utils import ConfigMixin, register_to_config
@@ -15,6 +15,8 @@ from diffusers.models.attention import CrossAttention, FeedForward
 
 from einops import rearrange, repeat
 import math
+
+import surgery
 
 
 def zero_module(module):
@@ -75,20 +77,71 @@ class VanillaTemporalModule(nn.Module):
         
         if zero_initialize:
             self.temporal_transformer.proj_out = zero_module(self.temporal_transformer.proj_out)
+        
+        self.memory
+
+    # SURGERY
+    def __setstate__(self, state):
+        state["memory"] = InputMemoryRouter(16)
+        self.__dict__.update(state)
+
+
 
     def forward(self, input_tensor, temb, encoder_hidden_states, attention_mask=None, anchor_frame_idx=None):
         video_length = input_tensor.shape[2]
 
-        # attention_mask = torch.triu(torch.ones(video_length, video_length), diagonal=1).to(input_tensor.device)
-
-        if video_length > 1:
-            hidden_states = input_tensor
-            hidden_states = self.temporal_transformer(hidden_states, encoder_hidden_states, attention_mask)
-            output = hidden_states
-        else:
-            output = input_tensor
-
+        # SURGERY
+        hidden_states = input_tensor
+        # print(f"input_tensor: {input_tensor.shape}")
+        hidden_states = self.memory.push(surgery.global_state["timestep"], hidden_states)
+        hidden_states = self.temporal_transformer(hidden_states, encoder_hidden_states, attention_mask)
+        hidden_states = hidden_states[:, :, -input_tensor.size(2):]
+        output = hidden_states
+        assert output.shape == input_tensor.shape, f"Expected output shape to be {input_tensor.shape}, but got {output.shape}."
         return output
+
+
+# SURGERY
+class InputMemoryRouter():
+    def __init__(self, video_length: int):
+        self.video_length = video_length
+        self.memory = dict[int, InputMemory]()
+    def push(self, timestep: int, input_tensor: Tensor):
+        # print(f"iteration: {timestep}, input_tensor: {input_tensor.shape}")
+        if timestep not in self.memory:
+            self.memory[timestep] = InputMemory(self.video_length)
+        return self.memory[timestep].push(input_tensor)
+    
+
+class InputMemory():
+    def __init__(self, video_length: int):
+        super().__init__()
+        self.memory = None
+        self.video_length = video_length
+        self.channels = 2 # Is this the best name?
+        self.run = 0
+
+    # Inputs and outputs are batch major concated in dim=0 (b f) d c
+    # internally we can still store them batch major, and concat / chop in the frame dimension
+    # b f d c
+    def push(self, input_tensor: Tensor):
+        # print(f"run: {self.run}")
+        self.run += 1
+
+        if self.memory is None:
+            # self.memory = input_tensor.repeat(self.video_length, 1, 1, 1)
+            # print(f"pushing to memory: {input_tensor.shape}, video_length: {self.video_length}, channels: {self.channels}")
+            # self.memory = rearrange(input_tensor, "b c f h w -> b f c d e", f=self.video_length)
+            self.memory = input_tensor
+            return input_tensor
+        else:
+            self.memory = torch.cat([self.memory, input_tensor], dim=2)
+        self.memory = self.memory[:, :, -self.video_length:]
+
+        # return rearrange(
+        #     self.memory, "b f c d e -> (b f) c d e", f=self.video_length
+        # )
+        return self.memory
 
 
 class TemporalTransformer3DModel(nn.Module):

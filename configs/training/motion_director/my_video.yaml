@@ -29,7 +29,7 @@ video:
 
   # Optional custom start frame (idx). Leave this at 0 if your video is already trimmed.
   # This is only recommended for single videos.
-  start_time: 0
+  start_time: 64
 
   # If your video is longer than 16 frames, it will be chunked into multiple parts.
   # This is advanced usage, so leave this at 1.
@@ -39,10 +39,10 @@ video:
   training_prompt: "pov, biking down new york city"
 
   # A custom prompt that will generate during to see your training progress.
-  validation_prompt: "skateboarding down tokyo, depth of field, highly realistic, 4k"
+  validation_prompt: "pov, biking down new york city"
 
 # The name of the LoRA file (will save to ./results/{save_name}...)
-save_name: "biking"
+save_name: "biking_512"
 
 # Quality
 # Quality of training: ["low", "preferred", "best"]

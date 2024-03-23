@@ -24,6 +24,7 @@ from diffusers.schedulers import (
     PNDMScheduler,
 )
 from diffusers.utils import deprecate, logging, BaseOutput
+import surgery
 
 from einops import rearrange
 
@@ -396,6 +397,7 @@ class AnimationPipeline(DiffusionPipeline):
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
+                surgery.global_state["timestep"] = i
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
@@ -451,7 +453,7 @@ class AnimationPipeline(DiffusionPipeline):
                     progress_bar.update()
                     if callback is not None and i % callback_steps == 0:
                         callback(i, t, latents)
-
+            surgery.global_state["frame"] += 1
         # Post-processing
         video = self.decode_latents(latents)
 

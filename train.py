@@ -38,6 +38,8 @@ from animatediff.utils.dataset import VideoJsonDataset, SingleVideoDataset, \
 from animatediff.utils.configs import get_simple_config
 from lion_pytorch import Lion
 
+from surgery import global_state
+
 augment_text_list = [
     "a video of",
     "a high quality video of",
@@ -973,6 +975,11 @@ def main(
                                 prompt = batch['text_prompt']
                             print(prompt)
                             if not image_finetune:
+
+                                # SURGERY
+                                global_state["validating"] = True
+                                print("*********************************")
+                                print(validation_pipeline)
                                 sample = validation_pipeline(
                                     prompt,
                                     generator    = generator,
@@ -981,6 +988,23 @@ def main(
                                     width        = width,
                                     **validation_data,
                                 ).videos
+                                global_state["validating"] = False
+
+                                kwargs = {
+                                    "prompt": prompt,
+                                    "video_length": train_data.sample_n_frames,
+                                    "height": height,
+                                    "width": width,
+                                }
+                                # add kwargs to validation_data
+                                kwargs.update(validation_data)
+                                print(kwargs)
+                                print("*********************************")
+
+                                torch.save(validation_pipeline, f"{output_dir}/validation_pipeline-{global_step}-{idx}.pt")
+                                torch.save(kwargs, f"{output_dir}/kwargs-{global_step}-{idx}.pt")
+
+
                                 save_videos_grid(sample, f"{output_dir}/samples/sample-{global_step}/{idx}.gif")
                                 samples.append(sample)
                                 

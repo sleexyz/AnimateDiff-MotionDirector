@@ -37,8 +37,8 @@ train_data:
   manual_sample_size: False
   sample_size: [320, 512]
   # The width and height in which you want your training data to be resized to.
-  width: 256
-  height: 256
+  width: 512
+  height: 512
 
   # This will find the closest aspect ratio to your input width and height. 
   # For example, 512x512 width and height with a video of resolution 1280x720 will be resized to 512x256
