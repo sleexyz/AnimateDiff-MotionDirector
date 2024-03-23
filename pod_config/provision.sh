@@ -106,6 +106,7 @@ stopasgroup = true
 killasgroup = true
 autostart=true
 autorestart=true
+redirect_stderr=true
 stderr_logfile=$REMOTE_ROOT/logs/jupyter.err.log
 stdout_logfile=$REMOTE_ROOT/logs/jupyter.out.log
 
@@ -115,6 +116,7 @@ chown=ubuntu:ubuntu
 command=/usr/local/bin/cloudflared tunnel run --url http://localhost:8875 --token $CLOUDFLARE_DEMO_KEY
 autostart=true
 autorestart=true
+redirect_stderr=true
 stderr_logfile=$REMOTE_ROOT/logs/cloudflared_jupyter.err.log
 stdout_logfile=$REMOTE_ROOT/logs/cloudflared_jupyter.out.log
 

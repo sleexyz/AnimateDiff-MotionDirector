@@ -3,10 +3,15 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { RunPodContext, Pod, ensureActivePodIsLoaded as ensurePodStarted, refreshState, getRemoteFromPodRuntime, stopPodAndWait, getFirstPod, Remote } from './runpod';
 import * as dotenv from 'dotenv';
 
-const env = {
+const env: Record<string, string> = {
   SSH_KEY: "~/.ssh/id_ed25519",
-  ...dotenv.parse(readFileSync('.env')),
 };
+let envFilePath = '.env';
+if (process.env.ENV_FILE) {
+  envFilePath = process.env.ENV_FILE;
+  console.error("Using env file override:", envFilePath);
+}
+Object.assign(env, dotenv.parse(readFileSync(envFilePath)));
 
 export async function loadActivePod(): Promise<Pod | null> {
   if (existsSync('.active_pod')) {
@@ -42,6 +47,18 @@ if (!env.WORKSPACE_NAME) {
 env.REMOTE_DIR = `${env.REMOTE_ROOT}/${env.WORKSPACE_NAME}`;
 
 const operations: OperationDict = {
+  env: {
+    name: 'env',
+    description: 'Print the environment variables',
+    usage: 'source <(pod env)',
+    requirePodStarted: false,
+    run: async (ctx: RunPodContext, args: string[]) => {
+      // Format the env variables as bash commands
+      for (const [key, value] of Object.entries(env)) {
+        console.log(`export ${key}="${value}"`);
+      }
+    },
+  },
   start: {
     name: "start",
     description: "Start the pod and provision it",
@@ -133,7 +150,8 @@ const operations: OperationDict = {
         process.exit(1);
       }
       console.log("Copying files from the pod...");
-      await spawn(`scp -i ${env.SSH_KEY} -r -P ${ctx.port} "${ctx.user}@${ctx.ip}:${env.REMOTE_DIR}/${source}" ${dest}`);
+      // await spawn(`scp -i ${env.SSH_KEY} -r -P ${ctx.port} "${ctx.user}@${ctx.ip}:${env.REMOTE_DIR}/${source}" ${dest}`);
+      await spawn(`rsync -avz -e "ssh -i ${env.SSH_KEY} -p ${ctx.port}" "${ctx.user}@${ctx.ip}:${env.REMOTE_DIR}/${source}" ${dest}`);
       return;
     },
   },
@@ -151,7 +169,8 @@ const operations: OperationDict = {
         process.exit(1);
       }
       console.log("Copying files to the pod...");
-      await spawn(`scp -i ${env.SSH_KEY} -r -P ${ctx.port} ${source} "${ctx.user}@${ctx.ip}:${env.REMOTE_DIR}/${dest}"`);
+      // await spawn(`scp -i ${env.SSH_KEY} -r -P ${ctx.port} ${source} "${ctx.user}@${ctx.ip}:${env.REMOTE_DIR}/${dest}"`);
+      await spawn(`rsync -avz -e "ssh -i ${env.SSH_KEY} -p ${ctx.port}" ${source} "${ctx.user}@${ctx.ip}:${env.REMOTE_DIR}/${dest}"`);
       return;
     },
   },

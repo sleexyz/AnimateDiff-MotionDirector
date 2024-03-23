@@ -25,7 +25,7 @@ mode_type: "single_video"
 video:
   # Your local video path
   # path: "examples/pexels-cottonbro-5319934 (2160p).mp4" # Or just path/to/folder_of_videos_with_.txt_files/ (set mode_type to "folder")
-  path: "videos/Atkp8mklOh0.webm"
+  path: "videos/Atkp8mklOh0.mp4"
 
   # Optional custom start frame (idx). Leave this at 0 if your video is already trimmed.
   # This is only recommended for single videos.
@@ -33,7 +33,7 @@ video:
 
   # If your video is longer than 16 frames, it will be chunked into multiple parts.
   # This is advanced usage, so leave this at 1.
-  max_chunks: 1
+  max_chunks: 0
 
   # Describe your action with a simple prompt.
   training_prompt: "pov, biking down new york city"
